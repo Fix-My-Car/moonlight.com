@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import "./globals.css";
+// FIX: Point to the globals.css inside the (shop) folder
+import "../(shop)/globals.css"; 
 
 export const metadata: Metadata = {
-  title: "Moonlight Perfumes",
-  description: "Premium Perfume Store",
+  title: "Moonlight Admin",
+  description: "Admin Dashboard",
 };
 
 export default function RootLayout({
