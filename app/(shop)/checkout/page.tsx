@@ -4,15 +4,14 @@ import { useCart } from "@/context/CartContext";
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle, Loader2 } from "lucide-react";
-import { db } from "@/lib/firebase"; // Import database
-import { collection, addDoc, serverTimestamp } from "firebase/firestore"; // Import Firebase functions
+import { db, auth } from "@/lib/firebase"; // Import auth to link order to user
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 
 export default function CheckoutPage() {
-  const { items, cartTotal } = useCart();
+  const { items, cartTotal, clearCart } = useCart(); // Assuming you might have a clearCart function, if not, it's fine
   const [isSuccess, setIsSuccess] = useState(false);
-  const [loading, setLoading] = useState(false); // Loading state
+  const [loading, setLoading] = useState(false);
 
-  // Form State
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
@@ -24,31 +23,39 @@ export default function CheckoutPage() {
     setLoading(true);
 
     try {
-      // 1. Prepare Order Data
+      // 1. Sanitize Data (Prevents Firestore crashes)
+      const cleanItems = items.map(item => ({
+        id: item.id || "unknown",
+        name: item.name || "Unknown Product",
+        price: Number(item.price) || 0
+      }));
+
+      // 2. Prepare Order Data
       const orderData = {
         customer: {
           name: formData.name,
           phone: formData.phone,
           address: formData.address,
         },
-        items: items.map(item => ({
-          name: item.name,
-          price: item.price,
-          id: item.id
-        })),
-        total: cartTotal,
-        status: "pending", // New orders start as pending
-        createdAt: serverTimestamp(), // Auto-add date
+        items: cleanItems,
+        total: Number(cartTotal) || 0,
+        status: "pending", // Default status
+        createdAt: serverTimestamp(),
+        // 3. Link to User (Important for Profile Page)
+        userId: auth.currentUser ? auth.currentUser.uid : "guest",
       };
 
-      // 2. Save to Firebase "orders" collection
+      console.log("Sending Order:", orderData); // Debugging
+
+      // 4. Save to Firestore
       await addDoc(collection(db, "orders"), orderData);
 
-      // 3. Show Success Screen
+      // 5. Success
       setIsSuccess(true);
-    } catch (error) {
-      console.error("Error adding document: ", error);
-      alert("Something went wrong. Please try again.");
+      // Optional: clearCart(); 
+    } catch (error: any) {
+      console.error("Checkout Error:", error);
+      alert(`Order Failed: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -61,10 +68,13 @@ export default function CheckoutPage() {
         <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6">
           <CheckCircle className="text-green-600" size={40} />
         </div>
-        <h1 className="text-4xl font-serif font-bold mb-4">Order Placed Successfully!</h1>
+        <h1 className="text-4xl font-serif font-bold mb-4">Order Placed!</h1>
         <p className="text-gray-500 mb-8 max-w-md">
-          Thank you for choosing Moonlight. We have received your order and will call you at <strong>{formData.phone}</strong> shortly to confirm delivery.
+          Thank you for choosing Moonlight. We will contact you at <strong>{formData.phone}</strong> shortly to confirm delivery.
         </p>
+        <Link href="/profile" className="text-black underline mb-4 block">
+          View My Order
+        </Link>
         <Link href="/shop" className="bg-black text-white px-8 py-3 uppercase tracking-widest text-xs hover:bg-gray-800 transition">
           Continue Shopping
         </Link>
@@ -154,7 +164,7 @@ export default function CheckoutPage() {
               {items.map((item) => (
                 <div key={item.uniqueId} className="flex justify-between text-sm">
                   <span>{item.name} <span className="text-gray-400">x1</span></span>
-                  <span className="font-medium">₹{item.price.toLocaleString()}</span>
+                  <span className="font-medium">₹{Number(item.price).toLocaleString()}</span>
                 </div>
               ))}
             </div>

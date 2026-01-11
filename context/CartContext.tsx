@@ -1,13 +1,14 @@
 "use client";
 
 import { createContext, useContext, useState, ReactNode } from "react";
+import toast from "react-hot-toast"; // <--- Import toast
 
 type CartItem = {
   id: string;
   name: string;
   price: number;
   image: string;
-  uniqueId: string; // We need this to remove specific items if duplicates exist
+  uniqueId: string;
 };
 
 type CartContextType = {
@@ -24,17 +25,21 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
 
   const addToCart = (product: Omit<CartItem, "uniqueId">) => {
-    // Create a random ID so we can remove just ONE item if they add the same perfume twice
     const newItem = { ...product, uniqueId: Math.random().toString(36).substr(2, 9) };
     setItems((prev) => [...prev, newItem]);
-    alert(`${product.name} added to cart!`);
+    
+    // ✨ Professional Notification
+    toast.success(`${product.name} added to bag`, {
+      icon: '🛍️',
+      duration: 3000,
+    });
   };
 
   const removeFromCart = (uniqueId: string) => {
     setItems((prev) => prev.filter((item) => item.uniqueId !== uniqueId));
+    toast.error("Item removed", { duration: 2000 });
   };
 
-  // Calculate total price automatically
   const cartTotal = items.reduce((total, item) => total + item.price, 0);
 
   return (
