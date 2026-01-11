@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-// FIX: Use '@' to point securely to the file from the root
-import "@/app/(shop)/globals.css"; 
+import "./globals.css"; // Simple and safe!
 
 export const metadata: Metadata = {
   title: "Moonlight Admin",
