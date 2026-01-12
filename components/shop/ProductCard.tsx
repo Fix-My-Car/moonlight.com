@@ -1,84 +1,84 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
+import Image from "next/image";
+import { ShoppingBag } from "lucide-react";
 import { useCart } from "@/context/CartContext";
-import { useRouter } from "next/navigation";
-import { ShoppingBag, Zap } from "lucide-react";
 
-interface ProductProps {
-  id: string;
-  name: string;
-  price: number;
-  image: string;
-  category: string;
-}
+export default function ProductCard({ product }: { product: any }) {
+  // CRASH PREVENTION: If product data is missing, don't render anything.
+  if (!product) return null; 
 
-export default function ProductCard({ id, name, price, image, category }: ProductProps) {
   const { addToCart } = useCart();
-  const router = useRouter();
 
-  const handleBuyNow = (e: React.MouseEvent) => {
-    e.preventDefault(); // Stop clicking the link to the product page
-    addToCart({ id, name, price, image });
-    router.push("/checkout"); // Go straight to checkout
-  };
+  // SAFETY CHECK: Ensure we have a valid image. 
+  const imageSrc = product.image && product.image.trim() !== "" 
+    ? product.image 
+    : "/icon.jpeg";
 
-  const handleAddToCart = (e: React.MouseEvent) => {
-    e.preventDefault();
-    addToCart({ id, name, price, image });
-  };
+  // SAFETY CHECK: Ensure price exists
+  const price = product.price || 0;
 
   return (
-    <Link href={`/product/${id}`} className="group block">
-      {/* Image Section */}
-      <div className="relative aspect-square bg-gray-100 mb-4 overflow-hidden rounded-lg">
-        <Image
-          src={image}
-          alt={name}
-          fill
-          className="object-cover group-hover:scale-105 transition duration-500"
-        />
-        
-        {/* DESKTOP HOVER BUTTONS (Hidden on mobile, visible on hover for desktop) */}
-        <div className="absolute inset-x-0 bottom-0 p-4 translate-y-full group-hover:translate-y-0 transition duration-300 hidden md:flex gap-2 bg-gradient-to-t from-black/50 to-transparent">
-           <button 
-            onClick={handleAddToCart}
-            className="flex-1 bg-white text-black py-2 text-xs uppercase font-bold tracking-wider hover:bg-gray-100 transition flex items-center justify-center gap-2 rounded"
-          >
-            <ShoppingBag size={14} /> Add
-          </button>
+    <div className="group relative bg-white border border-gray-100 rounded-2xl overflow-hidden hover:shadow-lg transition-all duration-300">
+      
+      {/* Clickable Image Area */}
+      <Link href={`/product/${product.id}`} className="block relative aspect-square bg-gray-50 overflow-hidden">
+         {/* Badge */}
+         {product.isNew && (
+            <span className="absolute top-3 left-3 bg-black text-white text-[10px] font-bold px-2 py-1 uppercase tracking-wider z-10">
+              New
+            </span>
+         )}
+
+         <Image
+            src={imageSrc}
+            alt={product.name || "Product Image"}
+            fill
+            className="object-cover object-center group-hover:scale-105 transition-transform duration-500"
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+         />
+         
+         {/* Quick Add Overlay */}
+         <div className="absolute inset-x-0 bottom-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 hidden md:flex justify-center bg-gradient-to-t from-black/10 to-transparent">
+            <button 
+              onClick={(e) => {
+                e.preventDefault(); 
+                addToCart(product);
+              }}
+              className="bg-white text-black font-medium text-sm py-2 px-6 rounded-full shadow-lg hover:bg-black hover:text-white transition-colors flex items-center gap-2"
+            >
+              <ShoppingBag size={16} />
+              Quick Add
+            </button>
+         </div>
+      </Link>
+
+      {/* Product Info */}
+      <div className="p-4">
+        <p className="text-xs text-gray-500 uppercase tracking-widest mb-1">
+          {product.category || "Unisex"}
+        </p>
+
+        <Link href={`/product/${product.id}`}>
+          <h3 className="text-lg font-serif font-medium text-gray-900 group-hover:text-purple-600 transition-colors line-clamp-1">
+            {product.name || "Unnamed Product"}
+          </h3>
+        </Link>
+
+        <div className="flex items-center justify-between mt-3">
+          <p className="text-gray-900 font-medium">
+            ₹{price.toLocaleString()}
+          </p>
+          
           <button 
-            onClick={handleBuyNow}
-            className="flex-1 bg-black text-white py-2 text-xs uppercase font-bold tracking-wider hover:bg-gray-800 transition flex items-center justify-center gap-2 rounded"
+            onClick={() => addToCart(product)}
+            className="md:hidden bg-black text-white p-2 rounded-full hover:bg-gray-800 transition"
           >
-            <Zap size={14} /> Buy
+            <ShoppingBag size={18} />
           </button>
         </div>
       </div>
-
-      {/* Product Details */}
-      <div className="text-center">
-        <p className="text-xs text-gray-500 uppercase tracking-widest mb-1">{category}</p>
-        <h3 className="text-lg font-serif font-medium group-hover:text-gray-600 transition">{name}</h3>
-        <p className="text-gray-900 mt-1 mb-3">₹{price.toLocaleString()}</p>
-
-        {/* MOBILE BUTTONS (Visible ONLY on mobile) */}
-        <div className="md:hidden flex gap-2 mt-2">
-          <button 
-            onClick={handleAddToCart}
-            className="flex-1 border border-black text-black py-2 text-[10px] uppercase font-bold tracking-wider rounded"
-          >
-            Add
-          </button>
-          <button 
-            onClick={handleBuyNow}
-            className="flex-1 bg-black text-white py-2 text-[10px] uppercase font-bold tracking-wider rounded"
-          >
-            Buy Now
-          </button>
-        </div>
-      </div>
-    </Link>
+    </div>
   );
 }

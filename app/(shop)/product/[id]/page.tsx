@@ -1,132 +1,190 @@
 "use client";
 
-import { products } from "@/lib/products";
-import AddToCart from "@/components/shop/AddToCart";
-import { notFound, useParams } from "next/navigation";
+import { useState, use } from "react";
 import Image from "next/image";
-import Link from "next/link";
-import { ArrowLeft, Star } from "lucide-react";
-import { useState } from "react";
+import { products } from "@/lib/products";
+import { useCart } from "@/context/CartContext";
+import { Star, Truck, ShieldCheck, ShoppingBag, Minus, Plus } from "lucide-react";
+import ProductCard from "@/components/shop/ProductCard";
+import { notFound } from "next/navigation";
 
-export default function ProductPage() {
-  const { id } = useParams();
+// Define the params type
+type Props = {
+  params: Promise<{ id: string }>;
+};
+
+export default function ProductPage({ params }: Props) {
+  // Unwrap params using React.use()
+  const { id } = use(params);
+  
   const product = products.find((p) => p.id === id);
+  const { addToCart } = useCart();
+  
+  // State for gallery and quantity
+  const [mainImage, setMainImage] = useState(product?.image || "");
+  const [selectedSize, setSelectedSize] = useState("50ml");
+  const [quantity, setQuantity] = useState(1);
 
-  // Initialize state with the first image (or main image if array is empty)
-  const [activeImage, setActiveImage] = useState(
-    product?.images ? product.images[0] : product?.image
-  );
+  // If product not found, show 404
+  if (!product) return notFound();
 
-  if (!product) {
-    notFound();
-  }
+  // Get Related Products (exclude current one, take first 4)
+  const relatedProducts = products
+    .filter((p) => p.id !== product.id)
+    .slice(0, 4);
 
-  // Fallback if 'images' array is missing in data
-  const gallery = product.images || [product.image];
+  // Ensure we have an array of images for the gallery
+  const galleryImages = product.images && product.images.length > 0 
+    ? product.images 
+    : [product.image];
+
+  const handleAddToCart = () => {
+    // Add the item multiple times based on quantity
+    for (let i = 0; i < quantity; i++) {
+      addToCart(product);
+    }
+    alert(`Added ${quantity} x ${product.name} to cart!`);
+  };
 
   return (
-    <div className="min-h-screen bg-white py-20 px-4">
-      <div className="max-w-6xl mx-auto">
+    <div className="bg-white min-h-screen py-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
-        {/* Breadcrumb / Back */}
-        <Link href="/shop" className="inline-flex items-center text-gray-500 hover:text-black mb-8 transition text-sm uppercase tracking-widest">
-          <ArrowLeft size={16} className="mr-2" />
-          Back to Collection
-        </Link>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-12 lg:gap-20">
+        {/* TOP SECTION: Gallery & Details */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-12 mb-20">
           
           {/* LEFT: Image Gallery */}
           <div className="space-y-4">
-            {/* Main Large Image */}
-            <div className="relative aspect-square bg-gray-50 rounded-lg overflow-hidden border border-gray-100">
+            {/* Main Image */}
+            <div className="relative aspect-square bg-gray-100 rounded-2xl overflow-hidden border border-gray-100">
               <Image
-                src={activeImage || product.image}
+                src={mainImage || product.image}
                 alt={product.name}
                 fill
                 className="object-cover"
                 priority
               />
             </div>
+            {/* Thumbnails */}
+            <div className="flex gap-4 overflow-x-auto pb-2">
+              {galleryImages.map((img, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setMainImage(img)}
+                  className={`relative w-20 h-20 rounded-lg overflow-hidden border-2 flex-shrink-0 transition-all ${
+                    mainImage === img ? "border-purple-600 ring-2 ring-purple-100" : "border-transparent opacity-70 hover:opacity-100"
+                  }`}
+                >
+                  <Image src={img} alt="Thumbnail" fill className="object-cover" />
+                </button>
+              ))}
+            </div>
+          </div>
 
-            {/* Thumbnails (Only show if there is more than 1 image) */}
-            {gallery.length > 1 && (
-              <div className="grid grid-cols-4 gap-4">
-                {gallery.map((img, index) => (
+          {/* RIGHT: Product Info */}
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+               <span className="bg-purple-100 text-purple-800 text-xs font-bold px-2 py-1 rounded uppercase tracking-wider">
+                 {product.category || "Unisex"}
+               </span>
+               {product.isNew && (
+                 <span className="bg-black text-white text-xs font-bold px-2 py-1 rounded uppercase tracking-wider">New Arrival</span>
+               )}
+            </div>
+
+            <h1 className="text-4xl font-bold text-gray-900 font-serif mb-2">{product.name}</h1>
+            
+            {/* Fake Reviews */}
+            <div className="flex items-center gap-1 mb-6">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <Star key={star} size={16} className="text-yellow-400 fill-yellow-400" />
+              ))}
+              <span className="text-sm text-gray-500 ml-2">(12 Reviews)</span>
+            </div>
+
+            <p className="text-2xl font-medium text-gray-900 mb-6">₹{product.price.toLocaleString()}</p>
+            
+            <p className="text-gray-600 leading-relaxed mb-8">
+              {product.description || "Experience luxury with this handcrafted fragrance. Made with rare ingredients to ensure a long-lasting and unique scent profile."}
+            </p>
+
+            {/* Size Selector */}
+            <div className="mb-8">
+              <span className="text-sm font-medium text-gray-900 block mb-3">Select Size</span>
+              <div className="flex gap-3">
+                {["50ml", "100ml"].map((size) => (
                   <button
-                    key={index}
-                    onClick={() => setActiveImage(img)}
-                    className={`relative aspect-square rounded-md overflow-hidden border-2 transition ${
-                      activeImage === img ? "border-black" : "border-transparent hover:border-gray-300"
+                    key={size}
+                    onClick={() => setSelectedSize(size)}
+                    className={`px-6 py-2 border rounded-full text-sm font-medium transition-all ${
+                      selectedSize === size
+                        ? "border-black bg-black text-white"
+                        : "border-gray-200 text-gray-600 hover:border-gray-300"
                     }`}
                   >
-                    <Image
-                      src={img}
-                      alt={`View ${index + 1}`}
-                      fill
-                      className="object-cover"
-                    />
+                    {size}
                   </button>
                 ))}
               </div>
-            )}
-          </div>
-
-          {/* RIGHT: Product Details */}
-          <div className="flex flex-col justify-center">
-            <p className="text-gray-500 uppercase tracking-widest text-sm mb-2">
-              {product.category}
-            </p>
-            <h1 className="text-4xl md:text-5xl font-serif font-bold mb-4">
-              {product.name}
-            </h1>
-            
-            {/* Fake Reviews */}
-            <div className="flex items-center gap-2 mb-6">
-              <div className="flex text-yellow-500">
-                <Star size={16} fill="currentColor" />
-                <Star size={16} fill="currentColor" />
-                <Star size={16} fill="currentColor" />
-                <Star size={16} fill="currentColor" />
-                <Star size={16} fill="currentColor" />
-              </div>
-              <span className="text-sm text-gray-400">(42 Reviews)</span>
             </div>
 
-            <p className="text-2xl text-gray-900 mb-8 font-medium">
-              ₹{product.price.toLocaleString()}
-            </p>
+            {/* Quantity & Add to Cart */}
+            <div className="flex gap-4 mb-10">
+              <div className="flex items-center border border-gray-300 rounded-full">
+                <button 
+                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                  className="px-4 py-3 hover:bg-gray-100 rounded-l-full"
+                >
+                  <Minus size={16} />
+                </button>
+                <span className="w-8 text-center font-medium">{quantity}</span>
+                <button 
+                  onClick={() => setQuantity(quantity + 1)}
+                  className="px-4 py-3 hover:bg-gray-100 rounded-r-full"
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
 
-            <div className="prose prose-sm text-gray-600 mb-10 leading-relaxed">
-              <p>{product.description}</p>
-              <p>
-                Experience the art of fine perfumery. Long-lasting, evocative, and purely unforgettable. 
-                Perfect for gift-giving or a personal treat.
-              </p>
+              <button
+                onClick={handleAddToCart}
+                className="flex-1 bg-purple-600 text-white font-bold rounded-full hover:bg-purple-700 transition flex items-center justify-center gap-2 shadow-lg shadow-purple-200"
+              >
+                <ShoppingBag size={20} />
+                Add to Cart - ₹{(product.price * quantity).toLocaleString()}
+              </button>
             </div>
 
-            {/* Add to Cart & Buy Now Buttons */}
-            <AddToCart 
-              id={product.id} 
-              name={product.name} 
-              price={product.price} 
-              image={product.image} 
-            />
-
-            {/* Additional Info Toggles (Static for now) */}
-            <div className="mt-12 space-y-4 border-t pt-8">
-              <div className="flex justify-between text-sm uppercase tracking-widest cursor-pointer hover:text-gray-600">
-                <span>Fragrance Notes</span>
-                <span>+</span>
+            {/* Trust Badges */}
+            <div className="grid grid-cols-2 gap-4 pt-8 border-t border-gray-100">
+              <div className="flex items-center gap-3">
+                <Truck className="text-purple-600" size={24} />
+                <div>
+                  <p className="text-sm font-bold text-gray-900">Free Shipping</p>
+                  <p className="text-xs text-gray-500">On all orders over ₹999</p>
+                </div>
               </div>
-              <div className="flex justify-between text-sm uppercase tracking-widest cursor-pointer hover:text-gray-600">
-                <span>Shipping & Returns</span>
-                <span>+</span>
+              <div className="flex items-center gap-3">
+                <ShieldCheck className="text-purple-600" size={24} />
+                <div>
+                  <p className="text-sm font-bold text-gray-900">Authentic</p>
+                  <p className="text-xs text-gray-500">100% Original Products</p>
+                </div>
               </div>
             </div>
           </div>
-
         </div>
+
+        {/* BOTTOM SECTION: Related Products */}
+        <div className="border-t border-gray-100 pt-16">
+          <h2 className="text-2xl font-bold font-serif mb-8 text-gray-900">You Might Also Like</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+            {relatedProducts.map((p) => (
+              <ProductCard key={p.id} product={p} />
+            ))}
+          </div>
+        </div>
+
       </div>
     </div>
   );
