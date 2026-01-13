@@ -1,176 +1,184 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useCart } from "@/context/CartContext";
-import { useState } from "react";
-import Link from "next/link";
-import { ArrowLeft, CheckCircle, Loader2 } from "lucide-react";
-import { db, auth } from "@/lib/firebase"; // Import auth to link order to user
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { useRouter } from "next/navigation";
+import { auth, db } from "@/lib/firebase";
+import { collection, addDoc, serverTimestamp, doc, getDoc } from "firebase/firestore"; // Added getDoc
+import { onAuthStateChanged } from "firebase/auth";
+import { ShieldCheck, Truck, Loader2 } from "lucide-react";
+import Image from "next/image";
 
 export default function CheckoutPage() {
-  const { items, cartTotal, clearCart } = useCart(); // Assuming you might have a clearCart function, if not, it's fine
-  const [isSuccess, setIsSuccess] = useState(false);
+  const { cart, cartTotal, clearCart } = useCart();
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
-
+  const [initializing, setInitializing] = useState(true); // To wait for auth check
+  
   const [formData, setFormData] = useState({
     name: "",
-    phone: "",
-    address: ""
+    email: "",
+    address: "",
+    city: "",
+    pincode: "",
+    phone: ""
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (!currentUser) {
+        // GUEST DETECTED: Redirect to Signup with a "return ticket"
+        router.push("/signup?redirect=/checkout");
+      } else {
+        // USER LOGGED IN: Fetch their saved details
+        try {
+          const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            // AUTO-FILL FORM
+            setFormData({
+              name: userData.name || "",
+              email: currentUser.email || "",
+              phone: userData.phone || "",
+              address: userData.address || "",
+              city: userData.city || "",
+              pincode: userData.pincode || ""
+            });
+          } else {
+            // Fallback if no firestore data exists yet
+            setFormData(prev => ({ ...prev, email: currentUser.email || "" }));
+          }
+        } catch (error) {
+          console.error("Error fetching user details:", error);
+        }
+      }
+      setInitializing(false);
+    });
+
+    return () => unsubscribe();
+  }, [router]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    try {
-      // 1. Sanitize Data (Prevents Firestore crashes)
-      const cleanItems = items.map(item => ({
-        id: item.id || "unknown",
-        name: item.name || "Unknown Product",
-        price: Number(item.price) || 0
-      }));
+    if (cart.length === 0) {
+        alert("Your cart is empty!");
+        router.push("/shop");
+        return;
+    }
 
-      // 2. Prepare Order Data
+    try {
+      const user = auth.currentUser;
       const orderData = {
-        customer: {
-          name: formData.name,
-          phone: formData.phone,
-          address: formData.address,
-        },
-        items: cleanItems,
-        total: Number(cartTotal) || 0,
-        status: "pending", // Default status
+        userId: user ? user.uid : "guest",
+        userEmail: formData.email,
+        items: cart,
+        total: cartTotal,
+        status: "processing",
+        shippingDetails: formData,
         createdAt: serverTimestamp(),
-        // 3. Link to User (Important for Profile Page)
-        userId: auth.currentUser ? auth.currentUser.uid : "guest",
       };
 
-      console.log("Sending Order:", orderData); // Debugging
-
-      // 4. Save to Firestore
       await addDoc(collection(db, "orders"), orderData);
+      clearCart();
+      
+      // Redirect to Order Success / Profile
+      router.push("/profile"); 
 
-      // 5. Success
-      setIsSuccess(true);
-      // Optional: clearCart(); 
-    } catch (error: any) {
-      console.error("Checkout Error:", error);
-      alert(`Order Failed: ${error.message}`);
+    } catch (error) {
+      console.error("Error placing order:", error);
+      alert("Failed to place order. Try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  // SUCCESS SCREEN
-  if (isSuccess) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center text-center px-4 bg-white">
-        <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6">
-          <CheckCircle className="text-green-600" size={40} />
-        </div>
-        <h1 className="text-4xl font-serif font-bold mb-4">Order Placed!</h1>
-        <p className="text-gray-500 mb-8 max-w-md">
-          Thank you for choosing Moonlight. We will contact you at <strong>{formData.phone}</strong> shortly to confirm delivery.
-        </p>
-        <Link href="/profile" className="text-black underline mb-4 block">
-          View My Order
-        </Link>
-        <Link href="/shop" className="bg-black text-white px-8 py-3 uppercase tracking-widest text-xs hover:bg-gray-800 transition">
-          Continue Shopping
-        </Link>
-      </div>
-    );
-  }
+  if (initializing) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-purple-600" /></div>;
 
   return (
-    <div className="min-h-screen bg-gray-50 py-20 px-4">
-      <div className="max-w-4xl mx-auto">
-        
-        {/* Back Button */}
-        <Link href="/cart" className="inline-flex items-center text-gray-500 hover:text-black mb-8 transition">
-          <ArrowLeft size={20} className="mr-2" />
-          Back to Cart
-        </Link>
+    <div className="min-h-screen bg-gray-50 py-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <h1 className="text-3xl font-serif font-bold text-gray-900 mb-8 text-center">Secure Checkout</h1>
 
-        <h1 className="text-3xl font-serif font-bold mb-8 text-center">Secure Checkout</h1>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
           
-          {/* LEFT: Shipping Form */}
-          <div className="bg-white p-6 rounded-lg shadow-sm">
-            <h2 className="font-bold text-lg mb-6">Shipping Details</h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs uppercase text-gray-500 mb-1">Full Name</label>
+          {/* Shipping Form (Auto-Filled) */}
+          <div className="bg-white p-8 rounded-2xl shadow-sm h-fit">
+            <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+              <Truck className="text-purple-600" /> Shipping Details
+            </h2>
+            
+            <form onSubmit={handlePlaceOrder} className="space-y-4">
+              <input 
+                  type="text" name="name" required placeholder="Full Name"
+                  value={formData.name} onChange={handleChange}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-purple-500 outline-none"
+              />
+              <input 
+                  type="email" name="email" required placeholder="Email Address"
+                  value={formData.email} onChange={handleChange}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-purple-500 outline-none"
+              />
+              <input 
+                  type="tel" name="phone" required placeholder="Phone Number"
+                  value={formData.phone} onChange={handleChange}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-purple-500 outline-none"
+              />
+              <input 
+                  type="text" name="address" required placeholder="Address"
+                  value={formData.address} onChange={handleChange}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-purple-500 outline-none"
+              />
+              <div className="grid grid-cols-2 gap-4">
                 <input 
-                  required 
-                  type="text" 
-                  className="w-full border border-gray-200 p-3 rounded text-sm focus:outline-none focus:border-black" 
-                  placeholder="John Doe"
-                  value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                    type="text" name="city" required placeholder="City"
+                    value={formData.city} onChange={handleChange}
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-purple-500 outline-none"
+                />
+                <input 
+                    type="text" name="pincode" required placeholder="Pincode"
+                    value={formData.pincode} onChange={handleChange}
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-purple-500 outline-none"
                 />
               </div>
+
+              <button 
+                  type="submit" disabled={loading}
+                  className="w-full bg-black text-white py-4 rounded-full font-bold text-lg hover:bg-gray-800 transition shadow-lg mt-6"
+              >
+                  {loading ? "Processing..." : `Confirm Order - ₹${cartTotal.toLocaleString()}`}
+              </button>
               
-              <div>
-                <label className="block text-xs uppercase text-gray-500 mb-1">Phone Number</label>
-                <input 
-                  required 
-                  type="tel" 
-                  className="w-full border border-gray-200 p-3 rounded text-sm focus:outline-none focus:border-black" 
-                  placeholder="+91 98765 43210" 
-                  value={formData.phone}
-                  onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs uppercase text-gray-500 mb-1">Address</label>
-                <textarea 
-                  required 
-                  rows={3} 
-                  className="w-full border border-gray-200 p-3 rounded text-sm focus:outline-none focus:border-black" 
-                  placeholder="Street, City, State, Pincode"
-                  value={formData.address}
-                  onChange={(e) => setFormData({...formData, address: e.target.value})}
-                ></textarea>
-              </div>
-
-              <div className="pt-4">
-                 <button 
-                  type="submit" 
-                  disabled={loading}
-                  className="w-full bg-black text-white py-4 uppercase tracking-widest text-xs hover:bg-gray-800 transition flex justify-center items-center gap-2"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="animate-spin" size={16} /> Processing...
-                    </>
-                  ) : (
-                    "Confirm Order (COD)"
-                  )}
-                </button>
-                <p className="text-xs text-gray-400 text-center mt-4">
-                  *Payment will be collected upon delivery.
-                </p>
-              </div>
+              <p className="text-center text-xs text-gray-500 mt-3 flex items-center justify-center gap-1">
+                 <ShieldCheck size={14} /> Secure Payment (COD / UPI)
+              </p>
             </form>
           </div>
 
-          {/* RIGHT: Order Summary */}
-          <div className="bg-white p-6 rounded-lg shadow-sm h-fit">
-            <h2 className="font-bold text-lg mb-6">Your Order</h2>
-            <div className="space-y-4 max-h-[300px] overflow-y-auto mb-6 pr-2">
-              {items.map((item) => (
-                <div key={item.uniqueId} className="flex justify-between text-sm">
-                  <span>{item.name} <span className="text-gray-400">x1</span></span>
-                  <span className="font-medium">₹{Number(item.price).toLocaleString()}</span>
-                </div>
-              ))}
-            </div>
-            
-            <div className="border-t pt-4">
-              <div className="flex justify-between font-bold text-xl">
+          {/* Order Summary */}
+          <div>
+            <div className="bg-white p-8 rounded-2xl shadow-sm sticky top-24">
+              <h2 className="text-xl font-bold mb-6">Your Order</h2>
+              <div className="space-y-4 max-h-80 overflow-y-auto custom-scrollbar">
+                {cart.map((item) => (
+                  <div key={item.id} className="flex gap-4 border-b border-gray-100 pb-4">
+                    <div className="relative w-16 h-16 bg-gray-100 rounded-md overflow-hidden flex-shrink-0">
+                      <Image src={item.image || "/icon.jpeg"} alt={item.name} fill className="object-cover" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-medium text-gray-900">{item.name}</h3>
+                      <p className="text-sm text-gray-500">Qty: {item.quantity || 1}</p>
+                    </div>
+                    <p className="font-bold text-gray-900">₹{item.price.toLocaleString()}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-between text-xl font-bold text-gray-900 pt-6 border-t mt-4">
                 <span>Total</span>
                 <span>₹{cartTotal.toLocaleString()}</span>
               </div>
